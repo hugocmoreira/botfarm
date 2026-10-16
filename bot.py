@@ -1,3 +1,8 @@
+"""
+Bot de Registro de Farm - Versão Formulário Direto (discord.py v2.x)
+Engenheiro de Software Especialista em Python e discord.py
+"""
+
 import os
 import sys
 import logging
@@ -8,82 +13,71 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-# Força o Python a imprimir os logs sem segurar no buffer
+# Evita que logs fiquem travados na memória do Render
 sys.stdout.reconfigure(line_buffering=True)
 
-# 1. Carrega variáveis de ambiente (.env em desenvolvimento local)
+# 1. Carregamento de Variáveis de Ambiente
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 CANAL_REGISTROS_ID = os.getenv("CANAL_REGISTROS_ID")
 
-print("--- [INICIANDO DIAGNÓSTICO DO RENDER] ---", flush=True)
-
-if not DISCORD_TOKEN:
-    print("[ERRO CRÍTICO] A variável DISCORD_TOKEN não foi encontrada no Render!", flush=True)
-    print("Vá em: Render Dashboard > Seu Serviço > Environment > Adicione DISCORD_TOKEN", flush=True)
-    sys.exit(1)
-
-if not CANAL_REGISTROS_ID:
-    print("[ERRO CRÍTICO] A variável CANAL_REGISTROS_ID não foi encontrada no Render!", flush=True)
-    print("Vá em: Render Dashboard > Seu Serviço > Environment > Adicione CANAL_REGISTROS_ID", flush=True)
+if not DISCORD_TOKEN or not CANAL_REGISTROS_ID:
+    print("[ERRO FATAL] DISCORD_TOKEN ou CANAL_REGISTROS_ID ausentes no Render!", flush=True)
     sys.exit(1)
 
 try:
     CANAL_REGISTROS_ID = int(CANAL_REGISTROS_ID.strip())
 except ValueError:
-    print(f"[ERRO CRÍTICO] CANAL_REGISTROS_ID ('{CANAL_REGISTROS_ID}') deve ser apenas números!", flush=True)
+    print("[ERRO FATAL] CANAL_REGISTROS_ID deve conter apenas números!", flush=True)
     sys.exit(1)
 
-print("[SUCESSO] Variáveis de ambiente verificadas!", flush=True)
-
-# 2. Mini Servidor HTTP para satisfazer a porta do Render (Web Service Free)
+# 2. Mini Servidor HTTP para o Render não desligar o bot (Free Tier)
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"Bot Farm Online no Render!")
+        self.wfile.write(b"Bot Farm Operacional!")
 
     def log_message(self, format, *args):
-        return  # Não polui o console com pings
+        return
 
 def iniciar_servidor_web():
     porta = int(os.environ.get("PORT", 8080))
-    print(f"[WEB] Servidor HTTP escutando na porta {porta}...", flush=True)
     servidor = HTTPServer(("0.0.0.0", porta), HealthCheckHandler)
     servidor.serve_forever()
 
 threading.Thread(target=iniciar_servidor_web, daemon=True).start()
 
-# 3. Configuração do Bot Discord
+# 3. Configuração dos Intents
 intents = discord.Intents.default()
 intents.guilds = True
 
+# ==========================================================
+# 4. FORMULÁRIO MODAL DIRETO (100% COMPATÍVEL COM O DISCORD)
+# ==========================================================
 class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
     nome = discord.ui.TextInput(
         label="Nome / Passaporte",
-        placeholder="Ex: Carlos Oliveira | ID: 4521",
+        placeholder="Ex: Carlos Silva | ID: 4521",
         style=discord.TextStyle.short,
         min_length=2,
         max_length=60,
         required=True
     )
 
-    item_select = discord.ui.Select(
-        placeholder="Selecione o item farmado...",
-        min_values=1,
-        max_values=1,
-        options=[
-            discord.SelectOption(label="Ferro", description="Minério de ferro", emoji="⛏️"),
-            discord.SelectOption(label="Sabão", description="Sabão para limpeza", emoji="🧼"),
-            discord.SelectOption(label="Tecido", description="Fardos de tecido", emoji="🧵"),
-            discord.SelectOption(label="Placa de Colete", description="Placas balísticas", emoji="🛡️"),
-        ]
+    item = discord.ui.TextInput(
+        label="Item Farmado",
+        placeholder="Ferro, Sabão, Tecido ou Placa de Colete",
+        style=discord.TextStyle.short,
+        min_length=3,
+        max_length=40,
+        required=True
     )
 
     quantidade = discord.ui.TextInput(
-        label="Quantidade",
+        label="Quantidade Entregue",
         placeholder="Ex: 500",
         style=discord.TextStyle.short,
         min_length=1,
@@ -91,56 +85,93 @@ class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
         required=True
     )
 
-    def __init__(self, evidencia: discord.Attachment, canal_id: int) -> None:
+    observacoes = discord.ui.TextInput(
+        label="Observações (Opcional)",
+        placeholder="Ex: Guardado no Baú 2 da Facção / Turno da noite",
+        style=discord.TextStyle.paragraph,
+        max_length=300,
+        required=False
+    )
+
+    def __init__(self, canal_id: int) -> None:
         super().__init__()
-        self.evidencia = evidencia
         self.canal_id = canal_id
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        """Processa e envia o registro para o canal de auditoria."""
         await interaction.response.defer(ephemeral=True)
 
         guild = interaction.guild
         if not guild:
-            await interaction.followup.send("❌ Use este comando em um servidor.", ephemeral=True)
+            await interaction.followup.send("❌ Use este comando dentro de um servidor.", ephemeral=True)
             return
 
         canal = guild.get_channel(self.canal_id)
         if not canal or not isinstance(canal, discord.TextChannel):
-            await interaction.followup.send("❌ Canal de registros não encontrado.", ephemeral=True)
+            await interaction.followup.send("❌ Canal de registros não encontrado. Verifique com a staff.", ephemeral=True)
             return
 
-        item_escolhido = self.item_select.values[0] if self.item_select.values else "Não informado"
-        qtd = self.quantidade.value.strip()
+        # Padronização e emojis para os itens solicitados
+        item_digitado = self.item.value.strip().title()
+        icones = {
+            "Ferro": "⛏️",
+            "Sabão": "🧼",
+            "Sabao": "🧼",
+            "Tecido": "🧵",
+            "Placa De Colete": "🛡️",
+            "Placa": "🛡️",
+            "Colete": "🛡️"
+        }
+        emoji_item = icones.get(item_digitado, "📦")
 
+        qtd_digitada = self.quantidade.value.strip()
+        obs = self.observacoes.value.strip() if self.observacoes.value else "Nenhuma observação informada."
+
+        # Montagem do Embed organizado
         embed = discord.Embed(
             title="📦 Novo Registro de Farm Recebido",
-            description=f"Registro enviado por {interaction.user.mention}.",
+            description=f"Registro formalizado pelo membro {interaction.user.mention}.",
             color=discord.Color.green(),
             timestamp=interaction.created_at
         )
-        embed.add_field(name="👤 Nome / Identificação", value=f"**{self.nome.value}**", inline=True)
-        embed.add_field(name="🏷️ Item Farmado", value=f"**{item_escolhido}**", inline=True)
-        embed.add_field(name="🔢 Quantidade", value=f"**{qtd}**", inline=True)
+
+        embed.add_field(name="👤 Membro Responsável", value=f"**{self.nome.value}**", inline=True)
+        embed.add_field(name=f"{emoji_item} Item Farmado", value=f"**{item_digitado}**", inline=True)
+        embed.add_field(name="🔢 Quantidade", value=f"**{qtd_digitada} un.**", inline=True)
         embed.add_field(name="🆔 Discord ID", value=f"`{interaction.user.id}`", inline=True)
-        embed.add_field(name="📅 Horário", value=f"<t:{int(interaction.created_at.timestamp())}:F>", inline=True)
+        embed.add_field(name="📅 Horário do Envio", value=f"<t:{int(interaction.created_at.timestamp())}:F>", inline=True)
+        embed.add_field(name="📝 Observações", value=f"_{obs}_", inline=False)
+
         embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-        embed.set_footer(text="FarmBot • Sistema de Auditoria")
+        embed.set_thumbnail(url="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=128&auto=format&fit=crop&q=80")
+        embed.set_footer(text="FarmBot • Sistema de Gestão de Farm")
 
         try:
-            foto_arquivo = await self.evidencia.to_file()
-            embed.set_image(url=f"attachment://{foto_arquivo.filename}")
-            await canal.send(embed=embed, file=foto_arquivo)
-
+            await canal.send(embed=embed)
             await interaction.followup.send(
-                f"✅ **Registro enviado com sucesso!**\nItem: **{item_escolhido}** | Quantidade: **{qtd}**",
+                f"✅ **Seu registro de farm foi enviado com sucesso!**\n"
+                f"• Item: **{emoji_item} {item_digitado}**\n"
+                f"• Quantidade: **{qtd_digitada}**\n"
+                f"• Canal: {canal.mention}",
                 ephemeral=True
             )
         except Exception as e:
-            await interaction.followup.send(f"❌ Erro ao enviar: {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ Erro ao enviar registro: {str(e)}", ephemeral=True)
 
+
+# ==========================================================
+# 5. SUBCLASSE DO BOT COM SETUP_HOOK
+# ==========================================================
 class FarmBot(commands.Bot):
     def __init__(self) -> None:
-        super().__init__(command_prefix="!", intents=intents)
+        super().__init__(
+            command_prefix="!",
+            intents=intents,
+            activity=discord.Activity(
+                type=discord.ActivityType.watching,
+                name="/farmar | Registros de Farm"
+            )
+        )
 
     async def setup_hook(self) -> None:
         print("[DISCORD] Sincronizando Comandos de Barra (/)...", flush=True)
@@ -148,22 +179,25 @@ class FarmBot(commands.Bot):
         print(f"[DISCORD] {len(synced)} comandos sincronizados com sucesso!", flush=True)
 
     async def on_ready(self) -> None:
-        print(f"[DISCORD] Bot logado com sucesso como: {self.user} (ID: {self.user.id})", flush=True)
+        print(f"[DISCORD] Bot online como: {self.user} (ID: {self.user.id})", flush=True)
+
 
 bot = FarmBot()
 
-@bot.tree.command(name="farmar", description="Abre o formulário de entrega de farm com foto de evidência.")
-@app_commands.describe(evidencia="Anexe a captura de tela (print) comprovando o farm")
-async def farmar(interaction: discord.Interaction, evidencia: discord.Attachment) -> None:
-    content_type = evidencia.content_type or ""
-    valido = content_type.startswith("image/") or evidencia.filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
-    if not valido:
-        await interaction.response.send_message("❌ A evidência precisa ser uma imagem válida.", ephemeral=True)
-        return
 
-    modal = FarmModal(evidencia=evidencia, canal_id=CANAL_REGISTROS_ID)
+# ==========================================================
+# 6. COMANDO SLASH /farmar (DIRETO E SEM UPLOAD)
+# ==========================================================
+@bot.tree.command(
+    name="farmar",
+    description="Abre o formulário de registro de farm."
+)
+async def farmar(interaction: discord.Interaction) -> None:
+    """Abre imediatamente o Modal para o usuário preencher."""
+    modal = FarmModal(canal_id=CANAL_REGISTROS_ID)
     await interaction.response.send_modal(modal)
 
+
 if __name__ == "__main__":
-    print("[DISCORD] Conectando ao gateway do Discord...", flush=True)
+    print("[DISCORD] Conectando ao Discord...", flush=True)
     bot.run(DISCORD_TOKEN)
