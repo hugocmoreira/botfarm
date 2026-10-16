@@ -1,6 +1,6 @@
 """
 =============================================================================
-BOT DE REGISTRO DE FARM (MENU DROPDOWN -> FORMULÁRIO POP-UP)
+BOT DE REGISTRO DE FARM (LAYOUT SIMPLIFICADO E LIMPO)
 Engenheiro de Software Especialista em Python e discord.py
 =============================================================================
 """
@@ -60,37 +60,30 @@ threading.Thread(target=iniciar_servidor_web, daemon=True).start()
 
 
 # =============================================================================
-# 3. MODAL (ABERTO AUTOMATICAMENTE APÓS A ESCOLHA NO DROPDOWN)
+# 3. MODAL SIMPLIFICADO (PEDE APENAS QUANTIDADE E OBSERVAÇÕES)
 # =============================================================================
 class FarmModal(discord.ui.Modal):
- #   nome = discord.ui.TextInput(
-#        label="Nome / Passaporte",
- #       placeholder="Ex: Carlos Silva | ID: 4521",
-  #      style=discord.TextStyle.short,
-  #      min_length=2,
-  #      max_length=60,
-  #      required=True
-#    )
-
+    # Campo 1: Quantidade Entregue
     quantidade = discord.ui.TextInput(
         label="Quantidade Entregue",
-        placeholder="Ex: 500",
+        placeholder="Ex: 50",
         style=discord.TextStyle.short,
         min_length=1,
         max_length=10,
         required=True
     )
 
+    # Campo 2: Observações Opcionais
     observacoes = discord.ui.TextInput(
         label="Observações (Opcional)",
-        placeholder="Ex: Turno da noite",
+        placeholder="Ex: Guardado no baú da facção / Turno da noite",
         style=discord.TextStyle.paragraph,
         max_length=300,
         required=False
     )
 
     def __init__(self, bot_instance: commands.Bot, canal_id: int, item_escolhido: str, emoji_item: str) -> None:
-        super().__init__(title=f"📋 Mercenários - Registro de {item_escolhido}")
+        super().__init__(title=f"📋 Registrar: {item_escolhido}")
         self.bot = bot_instance
         self.canal_id = canal_id
         self.item_escolhido = item_escolhido
@@ -107,32 +100,32 @@ class FarmModal(discord.ui.Modal):
             qtd_digitada = self.quantidade.value.strip()
             obs_texto = self.observacoes.value.strip() if self.observacoes.value else "Nenhuma observação informada."
 
-            # Monta a Embed de Registro
+            # Montagem da Embed Limpa e Formatada com inline=False
             embed = discord.Embed(
-                title="📦 Farm Registrado - Mercenários",
+                title="📦 Novo Registro de Farm Recebido",
                 description=f"Registro formalizado pelo membro {interaction.user.mention}.",
                 color=discord.Color.green(),
                 timestamp=interaction.created_at
             )
-           # embed.add_field(name="👤 Membro Responsável", value=f"**{self.nome.value}**", inline=True)
+
+            # Campos configurados exatamente como você solicitou:
             embed.add_field(name=f"{self.emoji_item} Item Farmado", value=f"**{self.item_escolhido}**", inline=False)
             embed.add_field(name="🛒 Quantidade", value=f"**{qtd_digitada} un.**", inline=False)
-          #  embed.add_field(name="🆔 Discord ID", value=f"`{interaction.user.id}`", inline=True)
             embed.add_field(name="📅 Horário", value=f"<t:{int(interaction.created_at.timestamp())}:F>", inline=False)
             embed.add_field(name="📝 Observações", value=f"_{obs_texto}_", inline=False)
 
             avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
             embed.set_author(name=interaction.user.display_name, icon_url=avatar_url)
-            embed.set_footer(text="Mercenários • Sistema de Gestão de Farm")
+            embed.set_footer(text="FarmBot • Sistema de Gestão de Farm")
 
-            # Posta no canal de registros
+            # Envia no canal de logs
             await canal.send(embed=embed)
 
             # Confirmação privada para o usuário
             await interaction.followup.send(
                 f"✅ **Seu registro de farm foi postado com sucesso!**\n"
                 f"• Item: **{self.emoji_item} {self.item_escolhido}**\n"
-                f"• Quantidade: **{qtd_digitada}**\n"
+                f"• Quantidade: **{qtd_digitada} un.**\n"
                 f"• Canal: {canal.mention}",
                 ephemeral=True
             )
@@ -141,7 +134,7 @@ class FarmModal(discord.ui.Modal):
         except discord.Forbidden:
             await interaction.followup.send(
                 "❌ **Erro de Permissão:** O bot não tem permissão para postar no canal de registros. "
-                "Conceda as permissões de 'Ver Canal', 'Enviar Mensagens' e 'Inserir Links' para o cargo do Bot.",
+                "Conceda permissões de 'Ver Canal', 'Enviar Mensagens' e 'Inserir Links'.",
                 ephemeral=True
             )
         except Exception as e:
@@ -150,11 +143,11 @@ class FarmModal(discord.ui.Modal):
 
 
 # =============================================================================
-# 4. VIEW COM O MENU DROPDOWN (SELECT MENU)
+# 4. VIEW COM O MENU DROPDOWN DE SELEÇÃO ÚNICA
 # =============================================================================
 class FarmSelectView(discord.ui.View):
     def __init__(self, bot_instance: commands.Bot, canal_id: int) -> None:
-        super().__init__(timeout=120)  # Expira após 2 minutos de inatividade
+        super().__init__(timeout=120)
         self.bot = bot_instance
         self.canal_id = canal_id
 
@@ -171,7 +164,7 @@ class FarmSelectView(discord.ui.View):
             ),
             discord.SelectOption(
                 label="Sabão",
-                description="Sabão para limpeza ou lavagem",
+                description="Sabão para limpeza ou suprimentos",
                 emoji="🧼",
                 value="Sabão"
             ),
@@ -190,7 +183,7 @@ class FarmSelectView(discord.ui.View):
         ]
     )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
-        """Quando o membro clica no item da lista, o Modal abre IMEDIATAMENTE!"""
+        """Quando o membro seleciona o item, o Modal simplificado abre na hora!"""
         item_escolhido = select.values[0]
 
         icones = {
@@ -201,7 +194,6 @@ class FarmSelectView(discord.ui.View):
         }
         emoji = icones.get(item_escolhido, "📦")
 
-        # Abre o formulário na tela do usuário
         modal = FarmModal(
             bot_instance=self.bot,
             canal_id=self.canal_id,
@@ -247,14 +239,13 @@ bot = FarmBot()
 
 
 # =============================================================================
-# 6. COMANDO SLASH /farmar (MOSTRA O MENU DROPDOWN)
+# 6. COMANDO SLASH /farmar
 # =============================================================================
 @bot.tree.command(
     name="farmar",
     description="Abre o menu de seleção para registrar entrega de farm."
 )
 async def farmar(interaction: discord.Interaction) -> None:
-    """Envia uma mensagem privada contendo o menu suspenso de seleção única."""
     view = FarmSelectView(bot_instance=bot, canal_id=CANAL_REGISTROS_ID)
     await interaction.response.send_message(
         "📦 **Selecione abaixo o item que você entregou:**",
@@ -274,5 +265,5 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 
 if __name__ == "__main__":
-    print("[DISCORD] Conectando ao Discord...", flush=True)
+    print("[DISCORD] Conectando ao gateway do Discord...", flush=True)
     bot.run(DISCORD_TOKEN)
