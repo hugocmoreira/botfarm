@@ -1,6 +1,6 @@
 """
 =============================================================================
-BOT DE REGISTRO DE FARM PARA DISCORD (discord.py v2.x)
+BOT DE REGISTRO DE FARM COM MENU DE SELEÇÃO NATIVO (discord.py v2.x)
 Engenheiro de Software Especialista em Python e discord.py
 =============================================================================
 """
@@ -16,7 +16,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 # =============================================================================
-# 1. CARREGAMENTO E VALIDAÇÃO DAS VARIÁVEIS DE AMBIENTE (.env)
+# 1. VARIÁVEIS DE AMBIENTE
 # =============================================================================
 load_dotenv()
 
@@ -25,7 +25,6 @@ CANAL_REGISTROS_ID = os.getenv("CANAL_REGISTROS_ID")
 
 if not DISCORD_TOKEN or not CANAL_REGISTROS_ID:
     print("[ERRO FATAL] DISCORD_TOKEN ou CANAL_REGISTROS_ID ausentes!", flush=True)
-    print("Verifique se as variáveis foram adicionadas na aba Environment do Render.", flush=True)
     sys.exit(1)
 
 try:
@@ -36,17 +35,16 @@ except ValueError:
 
 
 # =============================================================================
-# 2. MINI SERVIDOR HTTP (KEEP-ALIVE PARA O RENDER FREE TIER)
+# 2. SERVIDOR HTTP PARA MANTER O RENDER ONLINE (KEEP-ALIVE)
 # =============================================================================
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"Bot Farm Online e Operacional no Render!")
+        self.wfile.write(b"Bot Farm Operacional!")
 
     def log_message(self, format, *args):
-        # Silencia logs de pings periódicos para não poluir o terminal
         return
 
 def iniciar_servidor_web():
@@ -56,31 +54,21 @@ def iniciar_servidor_web():
         print(f"[WEB] Servidor HTTP escutando na porta {porta}...", flush=True)
         servidor.serve_forever()
     except Exception as e:
-        print(f"[WEB] Erro no servidor HTTP: {e}", flush=True)
+        print(f"[WEB] Erro no servidor: {e}", flush=True)
 
-# Roda o servidor web em uma thread separada para não travar o bot do Discord
 threading.Thread(target=iniciar_servidor_web, daemon=True).start()
 
 
 # =============================================================================
-# 3. FORMULÁRIO POP-UP (MODAL) PARA REGISTRO DE FARM
+# 3. MODAL QUE RECEBE O ITEM JÁ SELECIONADO NA LISTA
 # =============================================================================
-class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
+class FarmModal(discord.ui.Modal):
     nome = discord.ui.TextInput(
         label="Nome / Passaporte",
         placeholder="Ex: Carlos Silva | ID: 4521",
         style=discord.TextStyle.short,
         min_length=2,
         max_length=60,
-        required=True
-    )
-
-    item = discord.ui.TextInput(
-        label="Item Farmado",
-        placeholder="Ferro, Sabão, Tecido ou Placa de Colete",
-        style=discord.TextStyle.short,
-        min_length=2,
-        max_length=40,
         required=True
     )
 
@@ -101,45 +89,34 @@ class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
         required=False
     )
 
-    def __init__(self, bot_instance: commands.Bot, canal_id: int) -> None:
-        super().__init__()
+    def __init__(self, bot_instance: commands.Bot, canal_id: int, item_escolhido: str, emoji_item: str) -> None:
+        # Define o título da janela dinamicamente com o item selecionado
+        super().__init__(title=f"📋 Registrar: {item_escolhido}")
         self.bot = bot_instance
         self.canal_id = canal_id
+        self.item_escolhido = item_escolhido
+        self.emoji_item = emoji_item
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        """Chamado no momento em que o usuário clica em 'Enviar' no formulário."""
-        # Defer imediato para evitar o timeout de 3 segundos da API do Discord
         await interaction.response.defer(ephemeral=True)
 
         try:
-            # 1. Localiza o canal no cache; se não estiver no cache, busca na API oficial
+            # 1. Localiza o canal no cache ou busca na API
             canal = self.bot.get_channel(self.canal_id)
             if not canal:
                 try:
                     canal = await self.bot.fetch_channel(self.canal_id)
                 except Exception as fetch_err:
-                    print(f"[ERRO CANAL] Não foi possível encontrar o canal {self.canal_id}: {fetch_err}", flush=True)
+                    print(f"[ERRO CANAL] Falha ao buscar canal: {fetch_err}", flush=True)
                     await interaction.followup.send(
-                        f"❌ O canal de registros (`{self.canal_id}`) não foi encontrado ou o bot não tem permissão para vê-lo.",
+                        f"❌ O canal de registros (`{self.canal_id}`) não foi encontrado.",
                         ephemeral=True
                     )
                     return
 
-            # 2. Formata o nome do item e define emojis automáticos
-            item_formatado = self.item.value.strip().title()
-            icones = {
-                "Ferro": "⛏️",
-                "Sabão": "🧼",
-                "Sabao": "🧼",
-                "Tecido": "🧵",
-                "Placa De Colete": "🛡️",
-                "Placa": "🛡️",
-                "Colete": "🛡️"
-            }
-            emoji_item = icones.get(item_formatado, "📦")
             obs_texto = self.observacoes.value.strip() if self.observacoes.value else "Nenhuma observação informada."
 
-            # 3. Monta a Embed profissional
+            # 2. Criação da Embed organizada
             embed = discord.Embed(
                 title="📦 Novo Registro de Farm Recebido",
                 description=f"Registro enviado pelo membro {interaction.user.mention}.",
@@ -147,9 +124,9 @@ class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
                 timestamp=interaction.created_at
             )
             embed.add_field(name="👤 Membro Responsável", value=f"**{self.nome.value}**", inline=True)
-            embed.add_field(name=f"{emoji_item} Item Farmado", value=f"**{item_formatado}**", inline=True)
-            embed.add_field(name="🔢 Quantidade", value=f"**{self.quantidade.value.strip()} un.**", inline=True)
-            embed.add_field(name="🆔 Discord ID", value=f"`{interaction.user.id}`", inline=True)
+            embed.add_field(name=f"{self.emoji_item} Item Farmado", value=f"**{self.item_escolhido}**", inline=True)
+            embed.add_field(name="🛒 Quantidade", value=f"**{self.quantidade.value.strip()} un.**", inline=True)
+            # embed.add_field(name="🆔 Discord ID", value=f"`{interaction.user.id}`", inline=True)
             embed.add_field(name="📅 Horário", value=f"<t:{int(interaction.created_at.timestamp())}:F>", inline=True)
             embed.add_field(name="📝 Observações", value=f"_{obs_texto}_", inline=False)
 
@@ -157,33 +134,33 @@ class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
             embed.set_author(name=interaction.user.display_name, icon_url=avatar_url)
             embed.set_footer(text="FarmBot • Sistema de Gestão de Farm")
 
-            # 4. Envia o registro no canal configurado
+            # 3. Envia no canal configurado
             await canal.send(embed=embed)
 
-            # 5. Envia mensagem privada apenas para o usuário confirmando o envio
+            # 4. Confirmação privada para o usuário
             await interaction.followup.send(
-                f"✅ **Seu registro de farm foi enviado com sucesso!**\n"
-                f"• Item: **{emoji_item} {item_formatado}**\n"
+                f"✅ **Seu registro de farm foi postado com sucesso!**\n"
+                f"• Item: **{self.emoji_item} {self.item_escolhido}**\n"
                 f"• Quantidade: **{self.quantidade.value.strip()}**\n"
                 f"• Canal: {canal.mention}",
                 ephemeral=True
             )
-            print(f"[SUCESSO] Registro de {interaction.user.name} enviado para #{canal.name}", flush=True)
+            print(f"[SUCESSO] Registro de {self.item_escolhido} enviado para #{canal.name}", flush=True)
 
         except discord.Forbidden:
             traceback.print_exc()
             await interaction.followup.send(
-                "❌ **Erro de Permissão:** O bot não tem permissão para enviar mensagens ou embeds no canal de registros! "
-                "Conceda as permissões de 'Ver Canal', 'Enviar Mensagens' e 'Inserir Links' para o cargo do Bot.",
+                "❌ **Erro de Permissão:** O bot não tem permissão para postar no canal de registros. "
+                "Conceda 'Ver Canal', 'Enviar Mensagens' e 'Inserir Links'.",
                 ephemeral=True
             )
         except Exception as e:
             traceback.print_exc()
-            await interaction.followup.send(f"❌ Ocorreu um erro inesperado: `{str(e)}`", ephemeral=True)
+            await interaction.followup.send(f"❌ Erro inesperado: `{str(e)}`", ephemeral=True)
 
 
 # =============================================================================
-# 4. SUBCLASSE DO BOT COM SINCRONIZAÇÃO INSTANTÂNEA
+# 4. CONFIGURAÇÃO DO BOT COM ATUALIZAÇÃO INSTANTÂNEA
 # =============================================================================
 intents = discord.Intents.default()
 intents.guilds = True
@@ -195,24 +172,23 @@ class FarmBot(commands.Bot):
             intents=intents,
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
-                name="/farmar | Registros de Farm"
+                name="/farmar | Selecione o Item"
             )
         )
 
     async def setup_hook(self) -> None:
-        # Sincronização global padrão
         print("[DISCORD] Sincronizando comandos globais...", flush=True)
         await self.tree.sync()
 
     async def on_ready(self) -> None:
-        # Sincroniza diretamente e instantaneamente em cada servidor onde o bot está
+        # Força a atualização imediata no seu servidor (sem esperar 1 hora)
         for guild in self.guilds:
             try:
                 self.tree.copy_global_to(guild=guild)
                 synced = await self.tree.sync(guild=guild)
-                print(f"[DISCORD] Comandos atualizados INSTANTANEAMENTE no servidor: {guild.name} ({len(synced)} comandos)", flush=True)
+                print(f"[DISCORD] Menu atualizado com sucesso no servidor: {guild.name} ({len(synced)} comandos)", flush=True)
             except Exception as e:
-                print(f"[DISCORD] Falha ao sincronizar no servidor {guild.name}: {e}", flush=True)
+                print(f"[DISCORD] Erro ao sincronizar no servidor {guild.name}: {e}", flush=True)
 
         print(f"[DISCORD] Bot online com sucesso como: {self.user} (ID: {self.user.id})", flush=True)
 
@@ -221,19 +197,43 @@ bot = FarmBot()
 
 
 # =============================================================================
-# 5. COMANDO SLASH /farmar (DIRETO E SEM UPLOAD)
+# 5. COMANDO SLASH /farmar COM LISTA DE SELEÇÃO ÚNICA (CHOICES)
 # =============================================================================
 @bot.tree.command(
     name="farmar",
-    description="Abre o formulário de registro de farm."
+    description="Registra uma entrega de farm escolhendo o item na lista."
 )
-async def farmar(interaction: discord.Interaction) -> None:
-    """Abre imediatamente a janela de formulário (Modal) para o usuário."""
-    modal = FarmModal(bot_instance=bot, canal_id=CANAL_REGISTROS_ID)
+@app_commands.describe(
+    item="Selecione o item que você farmou na lista suspensa"
+)
+@app_commands.choices(item=[
+    app_commands.Choice(name="⛏️ Ferro", value="Ferro"),
+    app_commands.Choice(name="🧼 Sabão", value="Sabão"),
+    app_commands.Choice(name="🧵 Tecido", value="Tecido"),
+    app_commands.Choice(name="🛡️ Placa de Colete", value="Placa de Colete"),
+])
+async def farmar(interaction: discord.Interaction, item: app_commands.Choice[str]) -> None:
+    """
+    O usuário seleciona o item na lista suspensa e o modal abre na hora!
+    """
+    icones = {
+        "Ferro": "⛏️",
+        "Sabão": "🧼",
+        "Tecido": "🧵",
+        "Placa de Colete": "🛡️"
+    }
+    emoji = icones.get(item.value, "📦")
+
+    modal = FarmModal(
+        bot_instance=bot,
+        canal_id=CANAL_REGISTROS_ID,
+        item_escolhido=item.value,
+        emoji_item=emoji
+    )
     await interaction.response.send_modal(modal)
 
 
-# Tratamento global de erros nos Comandos de Barra
+# Tratamento global de erros
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
     print(f"[ERRO COMANDO] {error}", flush=True)
@@ -244,9 +244,6 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         await interaction.response.send_message(f"❌ Erro no comando: `{error}`", ephemeral=True)
 
 
-# =============================================================================
-# 6. INICIALIZAÇÃO DO BOT
-# =============================================================================
 if __name__ == "__main__":
-    print("[DISCORD] Conectando ao gateway do Discord...", flush=True)
+    print("[DISCORD] Conectando ao Discord...", flush=True)
     bot.run(DISCORD_TOKEN)
