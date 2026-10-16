@@ -63,14 +63,14 @@ threading.Thread(target=iniciar_servidor_web, daemon=True).start()
 # 3. MODAL (ABERTO AUTOMATICAMENTE APÓS A ESCOLHA NO DROPDOWN)
 # =============================================================================
 class FarmModal(discord.ui.Modal):
-    nome = discord.ui.TextInput(
-        label="Nome / Passaporte",
-        placeholder="Ex: Carlos Silva | ID: 4521",
-        style=discord.TextStyle.short,
-        min_length=2,
-        max_length=60,
-        required=True
-    )
+ #   nome = discord.ui.TextInput(
+#        label="Nome / Passaporte",
+ #       placeholder="Ex: Carlos Silva | ID: 4521",
+  #      style=discord.TextStyle.short,
+  #      min_length=2,
+  #      max_length=60,
+  #      required=True
+#    )
 
     quantidade = discord.ui.TextInput(
         label="Quantidade Entregue",
@@ -83,14 +83,14 @@ class FarmModal(discord.ui.Modal):
 
     observacoes = discord.ui.TextInput(
         label="Observações (Opcional)",
-        placeholder="Ex: Guardado no Baú 2 / Turno da noite",
+        placeholder="Ex: Turno da noite",
         style=discord.TextStyle.paragraph,
         max_length=300,
         required=False
     )
 
     def __init__(self, bot_instance: commands.Bot, canal_id: int, item_escolhido: str, emoji_item: str) -> None:
-        super().__init__(title=f"📋 Registrar: {item_escolhido}")
+        super().__init__(title=f"📋 Mercenários - Registro de {item_escolhido}")
         self.bot = bot_instance
         self.canal_id = canal_id
         self.item_escolhido = item_escolhido
@@ -109,21 +109,21 @@ class FarmModal(discord.ui.Modal):
 
             # Monta a Embed de Registro
             embed = discord.Embed(
-                title="📦 Novo Registro de Farm Recebido",
+                title="📦 Farm Registrado - Mercenários",
                 description=f"Registro formalizado pelo membro {interaction.user.mention}.",
                 color=discord.Color.green(),
                 timestamp=interaction.created_at
             )
-            embed.add_field(name="👤 Membro Responsável", value=f"**{self.nome.value}**", inline=True)
-            embed.add_field(name=f"{self.emoji_item} Item Farmado", value=f"**{self.item_escolhido}**", inline=True)
-            embed.add_field(name="🔢 Quantidade", value=f"**{qtd_digitada} un.**", inline=True)
-            embed.add_field(name="🆔 Discord ID", value=f"`{interaction.user.id}`", inline=True)
-            embed.add_field(name="📅 Horário", value=f"<t:{int(interaction.created_at.timestamp())}:F>", inline=True)
+           # embed.add_field(name="👤 Membro Responsável", value=f"**{self.nome.value}**", inline=True)
+            embed.add_field(name=f"{self.emoji_item} Item Farmado", value=f"**{self.item_escolhido}**", inline=False)
+            embed.add_field(name="🛒 Quantidade", value=f"**{qtd_digitada} un.**", inline=False)
+          #  embed.add_field(name="🆔 Discord ID", value=f"`{interaction.user.id}`", inline=True)
+            embed.add_field(name="📅 Horário", value=f"<t:{int(interaction.created_at.timestamp())}:F>", inline=False)
             embed.add_field(name="📝 Observações", value=f"_{obs_texto}_", inline=False)
 
             avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
             embed.set_author(name=interaction.user.display_name, icon_url=avatar_url)
-            embed.set_footer(text="FarmBot • Sistema de Gestão de Farm")
+            embed.set_footer(text="Mercenários • Sistema de Gestão de Farm")
 
             # Posta no canal de registros
             await canal.send(embed=embed)
