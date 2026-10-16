@@ -1,5 +1,5 @@
 """
-Bot de Registro de Farm - Versão Formulário Direto (discord.py v2.x)
+Bot de Registro de Farm - Versão Seleção Nativa + Evidência (discord.py v2.x)
 Engenheiro de Software Especialista em Python e discord.py
 """
 
@@ -32,6 +32,7 @@ except ValueError:
     print("[ERRO FATAL] CANAL_REGISTROS_ID deve conter apenas números!", flush=True)
     sys.exit(1)
 
+
 # 2. Mini Servidor HTTP para o Render não desligar o bot (Free Tier)
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -50,12 +51,14 @@ def iniciar_servidor_web():
 
 threading.Thread(target=iniciar_servidor_web, daemon=True).start()
 
+
 # 3. Configuração dos Intents
 intents = discord.Intents.default()
 intents.guilds = True
 
+
 # ==========================================================
-# 4. FORMULÁRIO MODAL DIRETO (100% COMPATÍVEL COM O DISCORD)
+# 4. FORMULÁRIO MODAL ATUALIZADO (COM SELEÇÃO E EVIDÊNCIA)
 # ==========================================================
 class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
     nome = discord.ui.TextInput(
@@ -67,13 +70,17 @@ class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
         required=True
     )
 
-    item = discord.ui.TextInput(
-        label="Item Farmado",
-        placeholder="Ferro, Sabão, Tecido ou Placa de Colete",
-        style=discord.TextStyle.short,
-        min_length=3,
-        max_length=40,
-        required=True
+    # Componente de Seleção Única (StringSelect) inserido diretamente no Modal
+    item = discord.ui.Select(
+        placeholder="Selecione o item farmado...",
+        min_values=1,
+        max_values=11,
+        options=[
+            discord.SelectOption(label="Ferro", emoji="⛏️", description="Minério de ferro"),
+            discord.SelectOption(label="Sabão", emoji="🧼", description="Insumo químico"),
+            discord.SelectOption(label="Tecido", emoji="🧵", description="Insumo têxtil"),
+            discord.SelectOption(label="Placa de Colete", emoji="🛡️", description="Equipamento de proteção")
+        ]
     )
 
     quantidade = discord.ui.TextInput(
@@ -87,15 +94,16 @@ class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
 
     observacoes = discord.ui.TextInput(
         label="Observações (Opcional)",
-        placeholder="Ex: Guardado no Baú 2 da Facção / Turno da noite",
+        placeholder="Ex: Guardado no Baú 2 da Facção",
         style=discord.TextStyle.paragraph,
         max_length=300,
         required=False
     )
 
-    def __init__(self, canal_id: int) -> None:
+    def __init__(self, canal_id: int, evidencia: discord.Attachment) -> None:
         super().__init__()
         self.canal_id = canal_id
+        self.evidencia = evidencia
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         """Processa e envia o registro para o canal de auditoria."""
@@ -108,26 +116,18 @@ class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
 
         canal = guild.get_channel(self.canal_id)
         if not canal or not isinstance(canal, discord.TextChannel):
-            await interaction.followup.send("❌ Canal de registros não encontrado. Verifique com a staff.", ephemeral=True)
+            await interaction.followup.send("❌ Canal de registros não encontrado.", ephemeral=True)
             return
 
-        # Padronização e emojis para os itens solicitados
-        item_digitado = self.item.value.strip().title()
-        icones = {
-            "Ferro": "⛏️",
-            "Sabão": "🧼",
-            "Sabao": "🧼",
-            "Tecido": "🧵",
-            "Placa De Colete": "🛡️",
-            "Placa": "🛡️",
-            "Colete": "🛡️"
-        }
-        emoji_item = icones.get(item_digitado, "📦")
+        # Pega o valor selecionado no componente de cliques
+        item_selecionado = self.item.values[0]
+        icones = {"Ferro": "⛏️", "Sabão": "🧼", "Tecido": "🧵", "Placa de Colete": "🛡️"}
+        emoji_item = icones.get(item_selecionado, "📦")
 
         qtd_digitada = self.quantidade.value.strip()
         obs = self.observacoes.value.strip() if self.observacoes.value else "Nenhuma observação informada."
 
-        # Montagem do Embed organizado
+        # Montagem do Embed organizado com a foto enviada
         embed = discord.Embed(
             title="📦 Novo Registro de Farm Recebido",
             description=f"Registro formalizado pelo membro {interaction.user.mention}.",
@@ -136,21 +136,24 @@ class FarmModal(discord.ui.Modal, title="📋 Registro de Farm"):
         )
 
         embed.add_field(name="👤 Membro Responsável", value=f"**{self.nome.value}**", inline=True)
-        embed.add_field(name=f"{emoji_item} Item Farmado", value=f"**{item_digitado}**", inline=True)
+        embed.add_field(name=f"{emoji_item} Item Farmado", value=f"**{item_selecionado}**", inline=True)
         embed.add_field(name="🔢 Quantidade", value=f"**{qtd_digitada} un.**", inline=True)
         embed.add_field(name="🆔 Discord ID", value=f"`{interaction.user.id}`", inline=True)
         embed.add_field(name="📅 Horário do Envio", value=f"<t:{int(interaction.created_at.timestamp())}:F>", inline=True)
         embed.add_field(name="📝 Observações", value=f"_{obs}_", inline=False)
 
+        # Insere a foto/print que o usuário enviou no comando
+        if self.evidencia:
+            embed.set_image(url=self.evidencia.url)
+
         embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-        embed.set_thumbnail(url="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=128&auto=format&fit=crop&q=80")
         embed.set_footer(text="FarmBot • Sistema de Gestão de Farm")
 
         try:
             await canal.send(embed=embed)
             await interaction.followup.send(
                 f"✅ **Seu registro de farm foi enviado com sucesso!**\n"
-                f"• Item: **{emoji_item} {item_digitado}**\n"
+                f"• Item: **{emoji_item} {item_selecionado}**\n"
                 f"• Quantidade: **{qtd_digitada}**\n"
                 f"• Canal: {canal.mention}",
                 ephemeral=True
@@ -186,15 +189,16 @@ bot = FarmBot()
 
 
 # ==========================================================
-# 6. COMANDO SLASH /farmar (DIRETO E SEM UPLOAD)
+# 6. COMANDO SLASH /farmar ATUALIZADO (PEDE A FOTO)
 # ==========================================================
 @bot.tree.command(
     name="farmar",
-    description="Abre o formulário de registro de farm."
+    description="Abre o formulário de registro de farm com menu de seleção."
 )
-async def farmar(interaction: discord.Interaction) -> None:
-    """Abre imediatamente o Modal para o usuário preencher."""
-    modal = FarmModal(canal_id=CANAL_REGISTROS_ID)
+@app_commands.describe(evidencia="Anexe o print ou foto comprovando o farm")
+async def farmar(interaction: discord.Interaction, evidencia: discord.Attachment) -> None:
+    """Pede a imagem e em seguida abre o modal moderno com a caixa de seleção."""
+    modal = FarmModal(canal_id=CANAL_REGISTROS_ID, evidencia=evidencia)
     await interaction.response.send_modal(modal)
 
 
