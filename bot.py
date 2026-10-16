@@ -162,8 +162,8 @@ class FarmModal(discord.ui.Modal, title="📋 Registro de Farm Mercenários"):
             )
             embed.add_field(name="👤 Membro Responsável", value=f"**{self.nome.value}**", inline=True)
             embed.add_field(name=f"{emoji_item} Item Farmado", value=f"**{item_escolhido}**", inline=True)
-            embed.add_field(name="🔢 Quantidade", value=f"**{qtd_digitada} un.**", inline=True)
-            # embed.add_field(name="🆔 Discord ID", value=f"`{interaction.user.id}`", inline=True)
+            embed.add_field(name="🛒 Quantidade", value=f"**{qtd_digitada} un.**", inline=True)
+            embed.add_field(name="🆔 Discord ID", value=f"`{interaction.user.id}`", inline=True)
             embed.add_field(name="📅 Horário", value=f"<t:{int(interaction.created_at.timestamp())}:F>", inline=True)
 
             avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
